@@ -11,11 +11,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check import Check, CheckFailure
 from playwright.async_api import async_playwright
 
+from check import Check, CheckFailure
 
-async def scenario(p, fail_token_list=False):
+
+async def scenario(p, fail_token_list=False, broken_cli_link=False):
     with tempfile.TemporaryDirectory() as root:
         check = Check(root)
         source = b"""#!/usr/bin/env python3
@@ -71,8 +72,22 @@ elif sys.argv[1]=='list':
             url = route.request.url
             path = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url).path
             html = ""
-            if path == "/":
-                html = '<a href="https://github.com/checkson-io/checkson-cli">CLI</a>'
+            if path == "/signin":
+                html = '<form onsubmit="event.preventDefault();document.cookie=\'signedin=yes;path=/\';location.href=\'/checks\'"><input name="email"><input name="password" type="password"><button>Login</button></form>'
+            elif path == "/checks":
+                assert "signedin=yes" in route.request.headers.get("cookie", "")
+                html = '<a href="/cli">CLI Tooling</a>'
+            elif path == "/cli":
+                assert "signedin=yes" in route.request.headers.get("cookie", "")
+                html = "<h1>Command line tooling</h1>"
+                if not broken_cli_link:
+                    html += '<a target="_blank" href="https://github.com/stefan-hudelmaier/checkson-cli">GitHub</a>'
+            elif path == "/stefan-hudelmaier/checkson-cli":
+                await route.fulfill(
+                    content_type="text/html",
+                    body='<script>location.replace("https://github.com/checkson-io/checkson-cli")</script>',
+                )
+                return
             elif path == "/checkson-io/checkson-cli":
                 html = '<a href="/checkson-io/checkson-cli/releases">releases page</a>'
             elif path.endswith("/releases"):
@@ -80,7 +95,10 @@ elif sys.argv[1]=='list':
             elif "/releases/tag/" in path:
                 html = '<a href="/checkson-io/checkson-cli/releases/download/v1.0.18/checkson-cli_1.0.18_linux_amd64.tar.gz">Download</a><a href="/checkson-io/checkson-cli/releases/download/v1.0.18/checksums.txt">checksums.txt</a>'
             elif path == "/signin-device-code":
-                html = """<input name="email"><input name="password" type="password"><button onclick="document.body.innerHTML=\'<button onclick=&quot;fetch(\\\'/confirm\\\').then(()=>document.body.innerHTML=\\\'The console application has been authorized.\\\')&quot;>Yes</button>\'">Login</button>"""
+                assert "signedin=yes" in route.request.headers.get("cookie", ""), (
+                    "CLI authorization lost browser session"
+                )
+                html = """<button onclick="fetch('/confirm').then(()=>document.body.innerHTML='The console application has been authorized.')">Yes</button>"""
             elif path == "/confirm":
                 (Path(root) / "browser-home" / "authorized").write_text("browser")
                 await route.fulfill(json={})
@@ -127,16 +145,23 @@ load();</script>"""
             ):
                 try:
                     await check.journey()
-                    assert not fail_token_list
+                    assert not fail_token_list and not broken_cli_link
                 except CheckFailure:
                     if not fail_token_list:
                         raise
                     assert check.stage == "Verify list using token authentication"
+                except Exception:
+                    if not broken_cli_link:
+                        raise
+                    assert check.stage == "Discover CLI in Checkson app"
+                    assert not check.binary.exists()
                 finally:
                     if check.token_id:
                         await check.delete_token(check.token_id)
             assert tokens == [existing]
-            print("PASS: browser fixture, failure=" + str(fail_token_list))
+            print(
+                f"PASS: browser fixture, token_list_failure={fail_token_list}, missing_app_link={broken_cli_link}"
+            )
         finally:
             await browser.close()
 
@@ -145,6 +170,7 @@ async def main():
     async with async_playwright() as p:
         await scenario(p)
         await scenario(p, True)
+        await scenario(p, broken_cli_link=True)
 
 
 asyncio.run(main())

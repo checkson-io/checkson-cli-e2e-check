@@ -1,4 +1,4 @@
-"""Website -> released CLI -> browser login -> list -> UI token -> token login -> list."""
+"""App login -> app CLI link -> released CLI -> browser login -> list -> UI token -> token login -> list."""
 
 import asyncio
 import hashlib
@@ -204,19 +204,32 @@ class Check:
                         await proc.communicate()
                     await browser.close()
 
+    async def sign_in_app(self):
+        self.step("Sign in to Checkson app with email/password")
+        await self.page.goto("https://app.checkson.io/signin")
+        await self.page.locator('input[name="email"]').fill(os.environ["user"])
+        await self.page.locator('input[name="password"]').fill(os.environ["pw"])
+        await self.page.get_by_role("button", name="Login", exact=True).click()
+        await self.page.get_by_role("link", name="CLI Tooling", exact=True).wait_for()
+
     async def download_cli(self):
-        self.step("Discover CLI on checkson.io")
-        await self.page.goto("https://checkson.io/")
-        await self.page.get_by_role("link", name="CLI", exact=True).click()
-        await self.page.wait_for_url("https://github.com/**")
+        self.step("Discover CLI in Checkson app")
+        await self.page.get_by_role("link", name="CLI Tooling", exact=True).click()
+        await self.page.get_by_role(
+            "heading", name="Command line tooling", exact=True
+        ).wait_for()
+        installation_link = self.page.get_by_role("link", name="GitHub", exact=True)
+        await installation_link.wait_for()
+        async with self.page.expect_popup() as popup:
+            await installation_link.click()
+        self.page = await popup.value
+        await self.page.wait_for_url("https://github.com/checkson-io/checkson-cli")
         repo = urlparse(self.page.url)
         if (
             repo.hostname != "github.com"
             or repo.path.rstrip("/") != "/checkson-io/checkson-cli"
         ):
-            raise CheckFailure(
-                "Homepage CLI link did not reach the official repository"
-            )
+            raise CheckFailure("App CLI link did not reach the official repository")
 
         self.step("Follow installation instructions to latest release")
         await self.page.get_by_role(
@@ -286,8 +299,9 @@ class Check:
             raise CheckFailure("CLI version does not match the selected release")
 
     async def journey(self):
+        await self.sign_in_app()
         await self.download_cli()
-        self.step("Browser CLI login with email/password")
+        self.step("Authorize CLI using signed-in browser")
         home = self.root / "browser-home"
         proc = await self.start_cli(home, "login")
         auth_url = None
@@ -304,9 +318,6 @@ class Check:
 
         auth_url = await asyncio.wait_for(read_url(), timeout=10)
         await self.page.goto(auth_url)
-        await self.page.locator('input[name="email"]').fill(os.environ["user"])
-        await self.page.locator('input[name="password"]').fill(os.environ["pw"])
-        await self.page.get_by_role("button", name="Login", exact=True).click()
         await self.page.get_by_role("button", name="Yes", exact=True).click()
         await self.page.get_by_text(
             "The console application has been authorized.", exact=False

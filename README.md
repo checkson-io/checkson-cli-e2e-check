@@ -1,20 +1,23 @@
 # Checkson CLI end-to-end check
 
-Can a user find the Checkson CLI, download it, sign in, and see their checks?
-This monitoring check follows that journey from the public website through to
+Can a signed-in user find the Checkson CLI in the app, download it, authorize it,
+and see their checks?
+This monitoring check follows that journey from the built Checkson web app through to
 an authenticated CLI command. It is designed to run periodically on Checkson.
 
 ## What it checks
 
 Each run starts with a fresh browser session and temporary CLI configuration:
 
-1. **Find the CLI:** open [checkson.io](https://checkson.io/) and follow its **CLI**
-   link to the official GitHub repository.
-2. **Download the latest release:** follow the repository's installation link,
-   select the latest release, and download the Linux binary for the container's
-   architecture. Verify its SHA-256 checksum and run `checkson version`.
-3. **Sign in through the browser:** run `checkson login`, open the URL it prints,
-   sign in with email and password, and approve the CLI authorization.
+1. **Sign in to the app:** open [app.checkson.io](https://app.checkson.io/signin)
+   and sign in with the configured email and password in a fresh browser session.
+2. **Find and download the CLI:** click **CLI Tooling** in the app menu and follow
+   its **GitHub** installation link, including the new tab and any repository
+   redirect. Follow the installation instructions to the latest release and download
+   the Linux binary. Verify its SHA-256 checksum and run `checkson version`.
+   This tests the link delivered by the built app, rather than the public homepage.
+3. **Authorize the CLI:** run `checkson login`, open the URL it prints in the same
+   signed-in browser session, and approve the CLI authorization.
 4. **List checks:** run `checkson list` and confirm that the expected check name
    appears. The health of that check does not affect this assertion.
 5. **Create a personal access token:** use the signed-in web UI to create a
@@ -144,7 +147,8 @@ docker run --rm --platform linux/amd64 --init --ipc=host --entrypoint python \
   checkson-cli-e2e-check:local tests/browser_fixture.py
 ```
 
-The browser scenarios test both success and token-list failure, including token
+The browser scenarios test success, token-list failure, and a missing installation
+link in the app. They verify reuse of the authenticated browser session and token
 cleanup with tooltip-labelled Delete buttons and overlapping token prefixes.
 
 GitHub Actions runs the unit tests, builds the Linux image, and runs the browser

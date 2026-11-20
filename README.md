@@ -33,7 +33,7 @@ cleanup. It does not create, edit, or delete your monitoring checks.
 Create a check named **checkson-cli-e2e** and configure this Docker image:
 
 ```text
-ghcr.io/checkson-io/checkson-cli-e2e-check:main
+ghcr.io/checkson-io/checkson-cli-e2e:main
 ```
 
 `latest` points to the same build. For a fixed version, use a published commit tag
@@ -73,7 +73,7 @@ docker run --rm --pull=always --platform linux/amd64 --init --ipc=host \
   -e user -e pw \
   -e CHECKSON_DIR=/results \
   -v checkson-cli-e2e-check-results:/results \
-  ghcr.io/checkson-io/checkson-cli-e2e-check:main
+  ghcr.io/checkson-io/checkson-cli-e2e:main
 ```
 
 The published image is Linux AMD64. On an ARM Mac, Docker runs it through
